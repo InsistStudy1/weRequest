@@ -1,0 +1,4 @@
+<!--index.wxml-->
+<view class="container">
+  <button open-type="getPhoneNumber" bindgetphonenumber="getPhoneNumber" wx:if="{{ flag }}">获取手机号</button>
+</view>
