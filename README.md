@@ -172,7 +172,7 @@ App({
 
 3. 请求配置，我们新建一个 `config.js` 进行配置。
 
-![1551700905339](C:\Users\welinkweb\Desktop\wxRequest 使用说明\img\1551700905339.png)
+![1551700905339](.\img\1551700905339.png)
 
 
 
