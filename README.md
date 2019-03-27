@@ -150,7 +150,7 @@ demo 下载地址：
 
 1. 下载`wxRequest` 并把 `wxRequest` 文件夹放到到 `util` 文件夹中
 
-![1551700537794](C:\Users\welinkweb\Desktop\wxRequest 使用说明\img\1551700537794.png)
+![1551700537794](.\img\1551700537794.png)
 
 
 
