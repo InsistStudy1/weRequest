@@ -19,6 +19,7 @@ wxRequest.config = {
     // 全局错误处理
     ERROR: {
         OTHER_ERROR: {
+            msg: '未知错误（错误字典没有）',
             ui: '系统错误',
             showUI: true
         }
@@ -66,11 +67,11 @@ function wxApiPromise (name, options = {}) {
 }
 
 /**
- * 通用登陆请求
+ * 通用请求
  * @param options
  * @returns {Promise}
  */
-wxRequest.request = async function (options) {
+wxRequest.request = function (options) {
     let baseUrl = this.config.baseUrl + this.config.version;
     let {
         url,
@@ -80,7 +81,7 @@ wxRequest.request = async function (options) {
         state = 0, // 1代表登录
     } = options;
 
-    options.url = baseUrl + url;
+    options.url = url.indexOf(baseUrl) === -1 ? baseUrl + url : url;
     method.toUpperCase();
 
 
@@ -96,50 +97,52 @@ wxRequest.request = async function (options) {
     if (this.system_userInfo) {
         header['TOKEN'] = this.system_userInfo.access;
     }
-    try {
-        let res = await wxApiPromise('request', options);
-        // 如果请求状态码存在
-        if (res.data.hasOwnProperty('code')) {
+    return new Promise(((resolve, reject) => {
+        wxApiPromise('request', options).then(res => {
+            if (res.data.hasOwnProperty('code')) {
+                // 请求成功
+                if (res.data.code === 200) {
+                    return resolve(res.data.data);
+                } else {
+                    // 如果请求是 TOKEN，发生错误进行重刷 TOKEN
+                    if (state === 1) {
+                        return this.getToken();
+                    }
 
-            // 请求成功
-            if (res.data.code === 200) {
-                return Promise.resolve(res.data.data);
-            } else {
-                // 如果请求是 TOKEN，发生错误进行重刷 TOKEN
-                if (state === 1) {
-                    return this.getToken();
-                }
+                    let error_code = res.data.code; // 错误码
+                    let errObj = this.config.ERROR[error_code]; // 错误对象
+                    // 如果错误对象不存在，就使用默认错误
+                    if (!errObj) {
+                        errObj = this.config.ERROR.OTHER_ERROR;
+                    }
 
-                let error_code = res.data.code; // 错误码
-                let errObj = this.config.ERROR[error_code]; // 错误对象
-                // 如果错误对象不存在，就使用默认错误
-                if (!errObj) {
-                    errObj = this.config.ERROR.OTHER_ERROR;
-                }
+                    // TOKEN 失效
+                    if (error_code === this.config.TOKEN_ERROR_CODE) {
+                        this.loginState = false;
+                        console.log('TOKEN 失效 ----------', res);
 
-                // TOKEN 失效
-                if (error_code === this.config.TOKEN_ERROR_CODE) {
-                    console.log('TOKEN 失效', res);
-                    // 把失效的请求压入 TOKEN 失效队列中
-                    this.tokenFailQueue.push(options);
-                    this.getToken();
-                    return;
-                }
+                        // 把失效的请求压入 TOKEN 失效队列中
+                        options.callback = resolve;
+                        this.tokenFailQueue.push(options);
+                        this.getToken();
+                        return;
+                    }
 
-                // 如果需要显示提示的话
-                if (errObj.showUI) {
-                    wx.showToast({
-                        title: `${ errObj.ui }`,
-                        icon: 'none'
-                    });
-                    return Promise.resolve(res);
+                    // 如果需要显示提示的话
+                    if (errObj.showUI) {
+                        wx.showToast({
+                            title: `${ errObj.ui }`,
+                            icon: 'none'
+                        });
+                        return Promise.resolve(errObj.msg);
+                    }
                 }
             }
-        }
-    } catch (err) {
-        console.log('request error', err);
-        return Promise.reject(err);
-    }
+        }).catch(err => {
+            console.log('request error', err);
+            reject(err);
+        })
+    }))
 };
 
 /**
@@ -184,25 +187,24 @@ wxRequest.getToken = async function () {
                 state: 1
             });
 
-            this.tokenFailTime = 0; // TOKEN 失败次数归 0
             wx.hideLoading();
-            console.log('TOKEN 获取成功', res);
             this.config.tokenSuccessFn(res);
 
             // 如果 TOKEN 请求失效请求队列长度大于1的话
             if (this.tokenFailQueue.length) {
                 let options = this.tokenFailQueue.shift();
-                this.request(options);
+                this.request(options).then(res => {
+                    options.callback && options.callback(res);
+                });
             }
             return Promise.resolve(res);
         } catch (error) {
-
+            console.log('登录失败 ----------', error);
             wx.hideLoading();
             wx.showToast({
-                title: '请求失联',
+                title: '登录失败，请尝试删除小程序重新搜索该小程序进入',
                 icon: 'none'
             });
-            throw '系统错误';
         }
     }
 }
@@ -250,8 +252,6 @@ wxRequest.urlDispose = async function (urlList, method) {
 
             for (let port in type) {
                 this[method][item][port] = (data, header) => {
-                    console.log(this);
-                    console.log(wxRequest);
                     let userid = this.system_userInfo.userid;
                     let string = oldUrl[port].format(userid);
                     return this[method === 'POST' ? 'post' : 'get'](`${ string }`, data, header);
